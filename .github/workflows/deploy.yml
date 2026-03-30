@@ -30,10 +30,10 @@ jobs:
       - name: Setup SSH deploy key
         shell: bash
         env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_KEY_B64: ${{ secrets.DEPLOY_KEY_B64 }}
         run: |
           mkdir -p ~/.ssh
-          printf "%s" "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          echo "$DEPLOY_KEY_B64" | base64 -d > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan github.com >> ~/.ssh/known_hosts
           cat > ~/.ssh/config <<'EOF'

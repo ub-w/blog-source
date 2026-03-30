@@ -1,6 +1,6 @@
 ---
 title: FPGA相关知识点1---generate语法
-date: 2025-10-02
+date: 2025-11-02
 categories: FPGA学习
 tags: HDLbits
 ---

@@ -1,5 +1,6 @@
 ---
 title: FPGA相关知识点4
+date: 2025-10-15
 categories: FPGA学习
 tags: HDLbits
 ---

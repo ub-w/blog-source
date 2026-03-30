@@ -1,5 +1,6 @@
 ---
 title: FPGA相关知识点3---寄存器引入带来的延迟
+date: 2025-10-09
 categories: FPGA学习
 tags: HDLbits
 ---

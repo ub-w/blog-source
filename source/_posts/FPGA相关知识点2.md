@@ -1,5 +1,6 @@
 ---
 title: FPGA相关知识点2---锁存器（latch）
+date: 2025-10-04
 categories: FPGA学习
 tags: HDLbits
 ---

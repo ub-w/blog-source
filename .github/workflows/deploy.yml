@@ -28,13 +28,25 @@ jobs:
         run: npx hexo generate
 
       - name: Setup SSH deploy key
+        shell: bash
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "$DEPLOY_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          printf "%s" "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan github.com >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<'EOF'
+          Host github.com
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/id_ed25519
+            IdentitiesOnly yes
+          EOF
+
+      - name: Test SSH connection
+        shell: bash
+        run: ssh -T git@github.com || true
 
       - name: Deploy to GitHub Pages repository
         run: |

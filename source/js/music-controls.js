@@ -1,46 +1,79 @@
 (function () {
-  const CONTROL_ID = "nav-music-stack-controls";
-
-  function runAction(action) {
-    if (!window.anzhiyu) return;
-    if (action === "prev" && typeof window.anzhiyu.musicSkipBack === "function") {
-      window.anzhiyu.musicSkipBack();
-    }
-    if (action === "next" && typeof window.anzhiyu.musicSkipForward === "function") {
-      window.anzhiyu.musicSkipForward();
-    }
+  function isTypingTarget(target) {
+    if (!target) return false;
+    const tagName = target.tagName;
+    return (
+      tagName === "INPUT" ||
+      tagName === "TEXTAREA" ||
+      tagName === "SELECT" ||
+      target.isContentEditable
+    );
   }
 
-  function createButton(label, action, title) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "nav-music-stack-btn";
-    button.setAttribute("aria-label", title);
-    button.setAttribute("title", title);
-    button.dataset.action = action;
-    button.innerHTML = `<span>${label}</span>`;
-    button.addEventListener("click", function (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      runAction(action);
-    });
-    return button;
+  function getAPlayer() {
+    const meting = document.querySelector("#nav-music meting-js");
+    return meting && meting.aplayer ? meting.aplayer : null;
   }
 
-  function mountMusicControls() {
+  function skip(direction) {
+    const player = getAPlayer();
+    if (!player || !player.list || !player.list.audios || !player.list.audios.length) return false;
+
+    if (direction === "prev" && typeof player.skipBack === "function") {
+      player.skipBack();
+      return true;
+    }
+
+    if (direction === "next" && typeof player.skipForward === "function") {
+      player.skipForward();
+      return true;
+    }
+
+    return false;
+  }
+
+  function bindWheelSwitch() {
     const navMusic = document.getElementById("nav-music");
-    if (!navMusic || document.getElementById(CONTROL_ID)) return;
+    if (!navMusic || navMusic.dataset.scrollSwitchBound === "true") return;
 
-    const controls = document.createElement("div");
-    controls.id = CONTROL_ID;
-    controls.className = "nav-music-stack-controls";
-    controls.appendChild(createButton("˄", "prev", "上一首"));
-    controls.appendChild(createButton("˅", "next", "下一首"));
-    navMusic.appendChild(controls);
+    navMusic.dataset.scrollSwitchBound = "true";
+    navMusic.setAttribute("title", "滚轮切歌，Alt+↑ 上一首，Alt+↓ 下一首");
+
+    navMusic.addEventListener(
+      "wheel",
+      function (event) {
+        if (!getAPlayer()) return;
+        event.preventDefault();
+        if (event.deltaY < 0) {
+          skip("prev");
+        } else if (event.deltaY > 0) {
+          skip("next");
+        }
+      },
+      { passive: false }
+    );
+  }
+
+  function bindKeyboardSwitch() {
+    if (window.__navMusicKeyboardBound) return;
+    window.__navMusicKeyboardBound = true;
+
+    document.addEventListener("keydown", function (event) {
+      if (isTypingTarget(event.target) || !event.altKey) return;
+
+      if (event.key === "ArrowUp") {
+        if (skip("prev")) event.preventDefault();
+      } else if (event.key === "ArrowDown") {
+        if (skip("next")) event.preventDefault();
+      }
+    });
   }
 
   function init() {
-    window.setTimeout(mountMusicControls, 600);
+    window.setTimeout(function () {
+      bindWheelSwitch();
+      bindKeyboardSwitch();
+    }, 800);
   }
 
   document.addEventListener("DOMContentLoaded", init);

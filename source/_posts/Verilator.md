@@ -13,7 +13,7 @@ Verilator 是一款开源的 SystemVerilog 仿真工具，通过将硬件描述�
 
 推荐使用wsl
 
-```
+```shell
 wsl.exe --update
 wsl --version
 wsl --install
@@ -25,14 +25,14 @@ wsl --install
 
 安装 Verilator 编译所需的**依赖工具**
 
-```
+```shell
 sudo apt-get update
 sudo apt-get install -y git make autoconf g++ flex bison
 ```
 
 安装Verilator
 
-```
+```shell
 sudo apt install verilator
 ```
 
@@ -50,12 +50,17 @@ sudo apt install verilator
 
 ## 3.编译运行命令
 
-```
+```shell
 verilator --binary -j 0 -Wall assoc_array_test.sv
 ./obj_dir/Vassoc_array_test
 ```
 
-通过使用第一个命令进行编译，verilator要先把sv文件转换成C++模型，然后再通过make编译成可运行文件，所以--binary必不可少，可以使用简化的命令`verilator --binary file.sv` 直接生成可执行文件。
+通过使用第一个命令进行编译，verilator要先把sv文件转换成C++模型，然后再通过make编译成可运行文件，所以--binary必不可少。
+可以使用简化的命令：
+```shell
+verilator --binary file.sv #直接生成可执行文件
+verilator --binary -Wno-fatal #显示所有警告但不停止编译
+```
 
-编译完成后，会自动生成obj_dir文件存放所有编译生成的中间文件和最终可执行文件。
+编译完成后，会自动生成obj_dir文件存放所有编译生成的中间文件和最终可执行文件，通过`./obj_dir/Vassoc_array_test`运行。
 

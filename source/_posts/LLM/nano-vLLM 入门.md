@@ -234,27 +234,356 @@ class Sequence:
 
 ```
 
-Sequence 表示 nano-vLLM 中的一个用户请求。它不是模型本身，而是用于保存请求状态。
+Sequence 表示 nano-vLLM 中的一个用户请求。它不是模型本身，而是用于**保存请求状态。**
 
 一个 Sequence 中包含：
 
 - seq_id：请求编号
 - status：请求状态，例如 WAITING、RUNNING、FINISHED
-- **token_ids**：当前请求的所有 token
+- token_ids：当前请求的所有 token
 - last_token：当前最后一个 token
-- **num_tokens**：当前 token 总数
+- num_tokens：当前 token 总数
 - num_prompt_tokens：prompt 的 token 数量
 - num_completion_tokens：已经生成的 token 数量
 - num_cached_tokens：prefix cache 命中的 token 数
-- **block_table**：逻辑 block 到物理 KV Cache block 的映射
+- block_table：逻辑 block 到物理 KV Cache block 的映射
 - temperature / max_tokens / ignore_eos：采样参数
 
 **Sequence.block_size** 表示每个 KV Cache block 能存放多少个 token。本 notebook 中为了演示方便设置为 4。
 
-**num_blocks** 表示当前请求需要多少个 KV Cache block，计算方式是：
-
-num_blocks = ceil(num_tokens / block_size)
+**num_blocks** 表示当前请求**需要多少个 KV Cache block**，计算方式是：num_blocks = ceil(num_tokens / block_size)，这里就是逻辑block
 
 **block(i)** 用于查看第 i 个逻辑 block 中包含哪些 token。
 
 **append_token(token_id)** 用于模拟 decode 阶段生成一个新 token 后，将该 token 追加到请求序列中。
+
+## 五、BlockManager
+
+```python
+import xxhash
+from collections import deque
+import numpy as np
+
+class Block:
+
+    def __init__(self, block_id):
+        self.block_id = block_id
+        self.ref_count = 0
+        self.hash = -1
+        self.token_ids = []
+
+    def update(self, hash: int, token_ids: list[int]):
+        self.hash = hash
+        self.token_ids = token_ids
+
+    def reset(self):
+        self.ref_count = 1
+        self.hash = -1
+        self.token_ids = []
+
+
+class BlockManager:
+
+    def __init__(self, num_blocks: int, block_size: int):
+        self.block_size = block_size
+        self.blocks: list[Block] = [Block(i) for i in range(num_blocks)]
+        self.hash_to_block_id: dict[int, int] = dict()
+        self.free_block_ids: deque[int] = deque(range(num_blocks))
+        self.used_block_ids: set[int] = set()
+
+    @classmethod
+    def compute_hash(cls, token_ids: list[int], prefix: int = -1):
+        h = xxhash.xxh64()
+        if prefix != -1:
+            h.update(prefix.to_bytes(8, "little"))
+        h.update(np.array(token_ids).tobytes())
+        return h.intdigest()
+
+    def _allocate_block(self, block_id: int) -> Block:
+        block = self.blocks[block_id]
+        assert block.ref_count == 0
+        block.reset()
+        self.free_block_ids.remove(block_id)
+        self.used_block_ids.add(block_id)
+        return self.blocks[block_id]
+
+    def _deallocate_block(self, block_id: int) -> Block:
+        assert self.blocks[block_id].ref_count == 0
+        self.used_block_ids.remove(block_id)
+        self.free_block_ids.append(block_id)
+
+    def can_allocate(self, seq: Sequence) -> bool:
+        return len(self.free_block_ids) >= seq.num_blocks
+
+    def allocate(self, seq: Sequence):
+        assert not seq.block_table
+        h = -1
+        cache_miss = False
+        for i in range(seq.num_blocks):
+            token_ids = seq.block(i)
+            h = self.compute_hash(token_ids, h) if len(token_ids) == self.block_size else -1
+            block_id = self.hash_to_block_id.get(h, -1)
+            if block_id == -1 or self.blocks[block_id].token_ids != token_ids:
+                cache_miss = True
+            if cache_miss:
+                block_id = self.free_block_ids[0]
+                block = self._allocate_block(block_id)
+            else:
+                seq.num_cached_tokens += self.block_size
+                if block_id in self.used_block_ids:
+                    block = self.blocks[block_id]
+                    block.ref_count += 1
+                else:
+                    block = self._allocate_block(block_id)
+            if h != -1:
+                block.update(h, token_ids)
+                self.hash_to_block_id[h] = block_id
+            seq.block_table.append(block_id)
+
+    def deallocate(self, seq: Sequence):
+        for block_id in reversed(seq.block_table):
+            block = self.blocks[block_id]
+            block.ref_count -= 1
+            if block.ref_count == 0:
+                self._deallocate_block(block_id)
+        seq.num_cached_tokens = 0
+        seq.block_table.clear()
+
+    def can_append(self, seq: Sequence) -> bool:
+        return len(self.free_block_ids) >= (len(seq) % self.block_size == 1)
+
+    def may_append(self, seq: Sequence):
+        block_table = seq.block_table
+        last_block = self.blocks[block_table[-1]]
+        if len(seq) % self.block_size == 1:
+            assert last_block.hash != -1
+            block_id = self.free_block_ids[0]
+            self._allocate_block(block_id)
+            block_table.append(block_id)
+        elif len(seq) % self.block_size == 0:
+            assert last_block.hash == -1
+            token_ids = seq.block(seq.num_blocks-1)
+            prefix = self.blocks[block_table[-2]].hash if len(block_table) > 1 else -1
+            h = self.compute_hash(token_ids, prefix)
+            last_block.update(h, token_ids)
+            self.hash_to_block_id[h] = last_block.block_id
+        else:
+            assert last_block.hash == -1
+```
+
+```python
+# 定义一个block_manager状态打印函数
+def print_block_manager_info(block_manager):
+    print(f"block_manager.blocks size: {len(block_manager.blocks)}")
+    print(f"blocks list: {[block.block_id for block in block_manager.blocks]}")
+    print(f"free_block_ids: {block_manager.free_block_ids}")
+    print(f"used_block_ids: {block_manager.used_block_ids}")
+```
+
+### 1.管理过程
+
+执行下面的代码：
+
+```python
+num_kvcache_blocks = 10
+kvcache_block_size = 4
+block_manager = BlockManager(num_kvcache_blocks, kvcache_block_size)
+print_block_manager_info(block_manager)
+```
+
+结果：
+
+```
+block_manager.blocks size: 10
+blocks list: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+free_block_ids: deque([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+used_block_ids: set()
+```
+
+**增加一个用户请求：**
+
+```python
+sampling_params = SamplingParams(temperature=0.6, max_tokens=256)
+token_ids = tokenizer.encode("hi, I'm kaiyuan")
+seq_0 = Sequence(token_ids, sampling_params)
+
+block_manager.allocate(seq_0)
+
+print("seq_0 token_ids:", seq_0.token_ids)
+print("seq_0 num_tokens:", seq_0.num_tokens)
+print("seq_0 num_blocks:", seq_0.num_blocks)
+print("seq_0 block_table:", seq_0.block_table)
+print_block_manager_info(block_manager)
+```
+
+```
+seq_0 token_ids: [6023, 11, 358, 2776, 595, 2143, 88, 10386]
+seq_0 num_tokens: 8
+seq_0 num_blocks: 2
+seq_0 block_table: [0, 1]
+block_manager.blocks size: 10
+blocks list: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+free_block_ids: deque([2, 3, 4, 5, 6, 7, 8, 9])
+used_block_ids: {0, 1}
+```
+
+该请求的token id被打印出来，数目，以及需要的block数目。这是都是固有的。观察到block table改变了，free block ids，used block ids也已经改变。
+
+block table的结果体现的是逻辑block到物理block的映射。
+
+`block_table` 这个列表的“索引”表示逻辑 block 编号，里面存的“值”表示物理 block id。
+
+即：逻辑block0对应物理block0，逻辑block1对应物理block1。
+
+**增加第二用户请求：**
+
+```python
+sampling_params = SamplingParams(temperature=0.6, max_tokens=256)
+token_ids = tokenizer.encode("can you speak English?")
+seq_1 = Sequence(token_ids, sampling_params)
+
+block_manager.allocate(seq_1)
+
+print("seq_1 token_ids:", seq_1.token_ids)
+print("seq_1 num_tokens:", seq_1.num_tokens)
+print("seq_1 num_blocks:", seq_1.num_blocks)
+print("seq_1 block_table:", seq_1.block_table)
+print_block_manager_info(block_manager)
+```
+
+```
+seq_1 token_ids: [4814, 498, 6468, 6364, 30]
+seq_1 num_tokens: 5
+seq_1 num_blocks: 2
+seq_1 block_table: [2, 3]
+block_manager.blocks size: 10
+blocks list: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+free_block_ids: deque([4, 5, 6, 7, 8, 9])
+used_block_ids: {0, 1, 2, 3}
+```
+
+可以看到，block table改变了，即逻辑block0对应物理block2，逻辑block1对应物理block3。
+
+### 2.分配过程
+
+重点看allocate函数：
+
+```
+for 每个逻辑 block:
+    如果这个 block 是完整 block:
+        计算它和前缀相关的 hash
+        查有没有可复用的物理 block
+    否则:
+        不查 cache
+
+    如果没命中 cache:
+        从 free_block_ids 拿一个新物理 block
+    否则:
+        复用已有物理 block
+        num_cached_tokens 增加
+        ref_count 增加
+
+    如果是完整 block:
+        记录 hash -> block_id
+
+    seq.block_table.append(block_id)
+```
+
+### 3.释放 block
+
+```python
+block_manager.deallocate(seq_0)
+
+print("after deallocate seq_0")
+print("seq_0 block_table:", seq_0.block_table)
+print_block_manager_info(block_manager)
+```
+
+```
+after deallocate seq_0
+seq_0 block_table: []
+block_manager.blocks size: 10
+blocks list: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+free_block_ids: deque([4, 5, 6, 7, 8, 9, 1, 0])
+used_block_ids: {2, 3}
+```
+
+观察到seq_0.block_table 清空；used_block_ids 减少；free_block_ids 增加
+
+`deallocate(seq)` 会遍历这个请求的 `block_table`，让对应 block 的 `ref_count = ref_count - 1`。如果 `ref_count` 变成 0，就说明没有请求再使用这个 block，可以释放回 free_block_ids。
+
+### 4.prefix cache
+
+```python
+# 第一个请求
+token_ids = tokenizer.encode("hi, I'm kaiyuan")
+seq_a = Sequence(token_ids, sampling_params)
+block_manager.allocate(seq_a)
+
+# 第二个完全相同请求
+token_ids = tokenizer.encode("hi, I'm kaiyuan")
+seq_b = Sequence(token_ids, sampling_params)
+block_manager.allocate(seq_b)
+
+print("seq_a block_table:", seq_a.block_table)
+print("seq_b block_table:", seq_b.block_table)
+print("seq_b num_cached_tokens:", seq_b.num_cached_tokens)
+
+for block_id in seq_b.block_table:
+    block = block_manager.blocks[block_id]
+    print(block_id, "ref_count:", block.ref_count, "token_ids:", block.token_ids)
+```
+
+```
+seq_a block_table: [0, 1]
+seq_b block_table: [0, 1]
+seq_b num_cached_tokens: 8
+0 ref_count: 2 token_ids: [6023, 11, 358, 2776]
+1 ref_count: 2 token_ids: [595, 2143, 88, 10386]
+```
+
+观察到参考数目为2，即如果多个请求有相同前缀，可以共享已经算好的 KV Cache，减少重复 prefill。
+
+### 5.may_append
+
+```python
+token_ids = tokenizer.encode("hi, I'm kaiyuan")
+seq = Sequence(token_ids, sampling_params)
+block_manager.allocate(seq)
+
+print("before append")
+print("tokens:", seq.token_ids)
+print("num_tokens:", seq.num_tokens)
+print("num_blocks:", seq.num_blocks)
+print("block_table:", seq.block_table)
+
+seq.append_token(123)
+block_manager.may_append(seq)
+
+print("after append")
+print("tokens:", seq.token_ids)
+print("num_tokens:", seq.num_tokens)
+print("num_blocks:", seq.num_blocks)
+print("block_table:", seq.block_table)
+print_block_manager_info(block_manager)
+```
+
+```
+before append
+tokens: [6023, 11, 358, 2776, 595, 2143, 88, 10386]
+num_tokens: 8
+num_blocks: 2
+block_table: [0, 1]
+after append
+tokens: [6023, 11, 358, 2776, 595, 2143, 88, 10386, 123]
+num_tokens: 9
+num_blocks: 3
+block_table: [0, 1, 2]
+block_manager.blocks size: 10
+blocks list: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+free_block_ids: deque([3, 4, 5, 6, 7, 8, 9])
+used_block_ids: {0, 1, 2}
+```
+
+decode 每生成一个 token → KV Cache 也要追加一个 token 的 K/V
+

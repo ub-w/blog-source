@@ -1,0 +1,2 @@
+新建文章
+npx hexo new llm 文章名字

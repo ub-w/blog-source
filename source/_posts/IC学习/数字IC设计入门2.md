@@ -1,7 +1,7 @@
 ---
 title: 数字IC设计入门2---基于Verilog的数字IC设计方法
 date: 2025-12-24
-categories: IC学习
+categories: IC
 tags: IC设计入门
 ---
 

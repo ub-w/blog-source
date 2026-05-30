@@ -1,7 +1,7 @@
 ---
 title: FPGA相关知识点0
 date: 2025-11-02
-categories: FPGA学习
+categories: IC
 tags: HDLbits
 ---
 

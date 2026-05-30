@@ -1,7 +1,7 @@
 ---
 title: SystemVerilog 显示/输出函数总结
 date: 2026-04-02
-categories: IC学习
+categories: IC
 tags: SystemVerilog验证
 ---
 

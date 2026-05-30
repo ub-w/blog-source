@@ -1,7 +1,7 @@
 ---
 title: SystemVerilog验证---过程语句和子程序
 date: 2026-04-07
-categories: IC学习
+categories: IC
 tags: SystemVerilog验证
 ---
 

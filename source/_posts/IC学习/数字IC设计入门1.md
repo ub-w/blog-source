@@ -1,7 +1,7 @@
 ---
 title: 数字IC设计入门1---数字IC行业概述
 date: 2025-12-23
-categories: IC学习
+categories: IC
 tags: IC设计入门
 ---
 

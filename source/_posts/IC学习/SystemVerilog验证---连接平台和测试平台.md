@@ -1,7 +1,7 @@
 ---
 title: SystemVerilog验证---连接平台和测试平台
 date: 2026-05-07
-categories: IC学习
+categories: IC
 tags: SystemVerilog验证
 ---
 

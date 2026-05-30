@@ -1,7 +1,7 @@
 ---
 title: SystemVerilog验证---OOP
 date: 2026-05-09
-categories: IC学习
+categories: IC
 tags: SystemVerilog验证
 ---
 # SystemVerilog验证---OOP

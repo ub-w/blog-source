@@ -1,7 +1,7 @@
 ---
 title: Verilator+Vscode工具使用介绍
 date: 2026-03-31
-categories: IC学习
+categories: IC
 tags: SystemVerilog验证
 ---
 

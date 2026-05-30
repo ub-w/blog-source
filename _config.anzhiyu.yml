@@ -1052,18 +1052,18 @@ home_top:
   subTitle: 万物可爱。
   siteText: anheyu.com
   category:
-    - name: FPGA
-      path: /categories/FPGA学习/
+    - name: IC学习
+      path: /categories/IC学习/
       shadow: var(--anzhiyu-shadow-blue)
       class: blue
       icon: anzhiyu-icon-dove
-    - name: IC学习
-      path: /categories/IC学习/
+    - name: 大模型
+      path: /categories/大模型/
       shadow: var(--anzhiyu-shadow-green)
       class: green
       icon: anzhiyu-icon-book
-    - name: 大模型
-      path: /categories/大模型/
+    - name: 算法
+      path: /categories/算法/
       shadow: var(--anzhiyu-shadow-red)
       class: red
       icon: anzhiyu-icon-fire

@@ -587,3 +587,242 @@ used_block_ids: {0, 1, 2}
 
 decode 每生成一个 token → KV Cache 也要追加一个 token 的 K/V
 
+## 六、Scheduler 调度器
+
+Scheduler 负责排队和调度，BlockManager 负责 KV cache 空间分配。
+
+```python
+from collections import deque
+
+class Scheduler:
+
+    def __init__(self, config: Config):
+        self.max_num_seqs = config.max_num_seqs
+        self.max_num_batched_tokens = config.max_num_batched_tokens
+        self.eos = config.eos
+        self.block_manager = BlockManager(config.num_kvcache_blocks, config.kvcache_block_size)
+        self.waiting: deque[Sequence] = deque()
+        self.running: deque[Sequence] = deque()
+        self.num_seqs = 0
+        self.num_batched_tokens = 0
+
+    def is_finished(self):
+        return not self.waiting and not self.running
+
+    def add(self, seq: Sequence):
+        self.waiting.append(seq)
+
+    def prefill(self):
+        scheduled_seqs = []
+        while self.waiting and self.num_seqs < self.max_num_seqs:
+            seq = self.waiting[0]
+            if self.num_batched_tokens + len(seq) > self.max_num_batched_tokens or not self.block_manager.can_allocate(seq):
+                break
+            self.num_seqs += 1
+            self.block_manager.allocate(seq)
+            self.num_batched_tokens += len(seq) - seq.num_cached_tokens
+            seq.status = SequenceStatus.RUNNING
+            self.waiting.popleft()
+            self.running.append(seq)
+            scheduled_seqs.append(seq)
+        return scheduled_seqs, True
+
+    def decode(self):
+        scheduled_seqs = []
+        while self.running and self.num_seqs < self.max_num_seqs:
+            seq = self.running.popleft()
+            while not self.block_manager.can_append(seq):
+                if self.running:
+                    self.preempt(self.running.pop())
+                else:
+                    self.preempt(seq)
+                    break
+            else:
+                self.num_seqs += 1
+                self.block_manager.may_append(seq)
+                scheduled_seqs.append(seq)
+        if scheduled_seqs:
+          self.running.extendleft(reversed(scheduled_seqs))
+        return scheduled_seqs, False
+
+    def preempt(self, seq: Sequence):
+        seq.status = SequenceStatus.WAITING
+        self.block_manager.deallocate(seq)
+        self.waiting.appendleft(seq)
+
+    def schedule(self, prefill_first=True) -> tuple[list[Sequence], bool]:
+        scheduled_seqs = []
+        self.num_seqs = 0
+        self.num_batched_tokens = 0
+        is_prefill = True
+
+        if prefill_first:
+            first_call, second_call = self.prefill, self.decode
+        else:
+            first_call, second_call = self.decode, self.prefill
+
+        scheduled_seqs, is_prefill = first_call()
+        if scheduled_seqs:
+            return scheduled_seqs, is_prefill
+
+        scheduled_seqs, is_prefill = second_call()
+        if scheduled_seqs:
+          return scheduled_seqs, is_prefill
+        assert scheduled_seqs
+
+    def postprocess(self, seqs: list[Sequence], token_ids: list[int]) -> list[bool]:
+        for seq, token_id in zip(seqs, token_ids):
+            seq.append_token(token_id)
+            if (not seq.ignore_eos and token_id == self.eos) or seq.num_completion_tokens == seq.max_tokens:
+                seq.status = SequenceStatus.FINISHED
+                self.block_manager.deallocate(seq)
+                self.running.remove(seq)
+
+```
+
+```python
+
+config = Config()
+config.num_kvcache_blocks = 100
+config.max_num_seqs = 3 # 最多运行多少个请求
+config.max_model_len = 15 # 单条请求长度
+
+
+sampling_params = SamplingParams(temperature=0.6, max_tokens=256)
+scheduler = Scheduler(config)
+
+
+# 增加第一个请求
+token_ids = tokenizer.encode("Do you subscribe InfraTech?")
+seq = Sequence(token_ids, sampling_params)
+scheduler.add(seq)
+
+# 增加第二个请求
+token_ids = tokenizer.encode("hi, I'm kaiyuan")
+seq = Sequence(token_ids, sampling_params)
+scheduler.add(seq)
+
+# 打印输入请求情况
+print("scheduler waiting queue: ")
+for id, seq in enumerate(scheduler.waiting):
+    print(f"id:{id} seq:{seq.token_ids}")
+
+# 测试调度与生成：
+print("\nrunning: ")
+while not scheduler.is_finished():
+    seqs, is_prefill = scheduler.schedule()
+    token_ids = run_fake_model(seqs, config.max_model_len)
+    scheduler.postprocess(seqs, token_ids)
+    for id, seq in enumerate(seqs):
+        print(f"id:{id} seq:{seq.token_ids}")
+```
+
+```
+scheduler waiting queue: 
+id:0 seq:[5404, 498, 17963, 14921, 956, 34097, 30]
+id:1 seq:[6023, 11, 358, 2776, 595, 2143, 88, 10386]
+
+running: 
+id:0 seq:[5404, 498, 17963, 14921, 956, 34097, 30, 100]
+id:1 seq:[6023, 11, 358, 2776, 595, 2143, 88, 10386, 831]
+id:0 seq:[5404, 498, 17963, 14921, 956, 34097, 30, 100, 58]
+id:1 seq:[6023, 11, 358, 2776, 595, 2143, 88, 10386, 831, 37]
+id:0 seq:[5404, 498, 17963, 14921, 956, 34097, 30, 100, 58, 205]
+id:1 seq:[6023, 11, 358, 2776, 595, 2143, 88, 10386, 831, 37, 736]
+id:0 seq:[5404, 498, 17963, 14921, 956, 34097, 30, 100, 58, 205, 241]
+id:1 seq:[6023, 11, 358, 2776, 595, 2143, 88, 10386, 831, 37, 736, 317]
+id:0 seq:[5404, 498, 17963, 14921, 956, 34097, 30, 100, 58, 205, 241, 320]
+id:1 seq:[6023, 11, 358, 2776, 595, 2143, 88, 10386, 831, 37, 736, 317, 427]
+id:0 seq:[5404, 498, 17963, 14921, 956, 34097, 30, 100, 58, 205, 241, 320, 747]
+id:1 seq:[6023, 11, 358, 2776, 595, 2143, 88, 10386, 831, 37, 736, 317, 427, 696]
+id:0 seq:[5404, 498, 17963, 14921, 956, 34097, 30, 100, 58, 205, 241, 320, 747, 153]
+id:1 seq:[6023, 11, 358, 2776, 595, 2143, 88, 10386, 831, 37, 736, 317, 427, 696, 940]
+id:0 seq:[5404, 498, 17963, 14921, 956, 34097, 30, 100, 58, 205, 241, 320, 747, 153, 473]
+id:1 seq:[6023, 11, 358, 2776, 595, 2143, 88, 10386, 831, 37, 736, 317, 427, 696, 940, -1]
+id:0 seq:[5404, 498, 17963, 14921, 956, 34097, 30, 100, 58, 205, 241, 320, 747, 153, 473, -1]
+```
+
+### 1.初始化
+
+scheduler = Scheduler(config)
+
+创建一个 Scheduler 实例，执行配置文件，并且初始化。生成结果如下：
+
+```
+scheduler
+ ├── block_manager  一个 BlockManager 实例
+ ├── waiting        空队列
+ ├── running        空队列
+ ├── max_num_seqs
+ └── max_num_batched_tokens
+```
+
+self.waiting: deque[Sequence] = deque()
+self.running: deque[Sequence] = deque()
+
+创建两个队列，区分seq当前请求状态。
+
+### 2.perfill
+
+重点在于perfill阶段：
+
+```
+1. 从 waiting 队首取请求
+2. 检查 batch 限制
+3. 检查 KV cache block 是否够
+4. 分配 KV cache
+5. 把请求从 waiting 移到 running
+6. 加入本轮要执行的 scheduled_seqs
+```
+
+### 3.decode
+
+然后是decode阶段：
+
+作用是对已经 prefill 过的请求，每轮继续生成 1 个 token。
+
+```
+1. 从 running 队列取一个正在运行的请求
+2. 检查它还能不能继续追加 KV cache
+3. 如果可以，就安排它本轮继续生成一个 token
+4. 如果 KV cache 不够，就可能 preempt 抢占请求
+```
+
+### 4.postprocess
+
+模型生成完 token 后，需要把新 token 加回到 Sequence 里。
+
+代码：
+
+```
+seq.append_token(token_id)
+```
+
+然后判断请求是否结束：
+
+```
+if token_id == self.eos or seq.num_completion_tokens == seq.max_tokens:
+```
+
+如果结束，就：
+
+```
+seq.status = SequenceStatus.FINISHED
+self.block_manager.deallocate(seq)
+self.running.remove(seq)
+```
+
+意思是：
+
+```
+1. 标记请求结束
+2. 释放它占用的 KV cache block
+3. 从 running 队列移除
+```
+
+所以 postprocess 负责：
+
+```
+模型生成完之后的收尾工作
+```
+

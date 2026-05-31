@@ -14,6 +14,8 @@
 
 （4）`append()` 是 Python **列表（list）**的一个方法，用于**在列表末尾添加一个元素**。
 
+（5）`list()` 是 Python 中的一个**内置函数**，用于创建列表。
+
 ```python
 class Solution(object):
     def groupAnagrams(self, strs):
@@ -38,6 +40,10 @@ class Solution(object):
 - 在 strs 中没有字符串可以通过重新排列来形成 `"bat"`。
 - 字符串 `"nat"` 和 `"tan"` 是字母异位词，因为它们可以重新排列以形成彼此。
 - 字符串 `"ate"` ，`"eat"` 和 `"tea"` 是字母异位词，因为它们可以重新排列以形成彼此。
+
+**理解：**
+
+重点可能在于if key not in out，判断key是否在哈希表内，然后创建字典，然后按照key值相同重新排列。
 
 ## 2.两数之和
 
@@ -82,17 +88,46 @@ class Solution(object):
 解释：因为 nums[0] + nums[1] == 9 ，返回 [0, 1] 。
 ```
 
-**示例 2：**
+**理解：**
+
+创建哈希表out，将num作为key，判断差值是否在键中，然后返回改键的值，即索引。反向操作。
+
+## 3.最长连续序列
+
+**题目：**
+
+给定一个未排序的整数数组 `nums` ，找出数字连续的最长序列（不要求序列元素在原数组中连续）的长度。
+
+请你设计并实现时间复杂度为 `O(n)` 的算法解决此问题。
+
+```python
+class Solution(object):
+    def longestConsecutive(self, nums):
+        """
+        :type nums: List[int]
+        :rtype: int
+        """
+        numset = set(nums)
+        maxlength = 0
+        for num in numset:
+            if num - 1 not in numset:
+                start = num
+                currentlength = 1
+                while num + 1 in numset:
+                    currentlength += 1
+                    num += 1
+                maxlength = max(maxlength, currentlength)
+        return maxlength
+```
+
+**示例 1：**
 
 ```
-输入：nums = [3,2,4], target = 6
-输出：[1,2]
+输入：nums = [100,4,200,1,3,2]
+输出：4
+解释：最长数字连续序列是 [1, 2, 3, 4]。它的长度为 4。
 ```
 
-**示例 3：**
+**理解：**
 
-```
-输入：nums = [3,3], target = 6
-输出：[0,1]
-```
-
+将原来的列表转化为哈希表，因为查找这个操作在哈希表的时间复杂度为O（1），即只查询一次，通过计算哈希值，和反解哈希值查找。这里的还用到判断起始值，以及不断加1话更新连续长度。

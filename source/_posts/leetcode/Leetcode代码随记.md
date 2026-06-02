@@ -1,3 +1,10 @@
+---
+title: 大模型推理基础
+date: 2026-5-30
+categories: 算法
+tags: leetcode
+---
+
 # 一、哈希
 ## 1.字母异位词分组
 **题目：**

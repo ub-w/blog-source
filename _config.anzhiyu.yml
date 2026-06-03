@@ -1052,7 +1052,7 @@ home_top:
   subTitle: 万物可爱。
   siteText: anheyu.com
   category:
-    - name: IC学习
+    - name: IC
       path: /categories/IC学习/
       shadow: var(--anzhiyu-shadow-blue)
       class: blue

@@ -1,6 +1,6 @@
 ---
 title: Cuda引言
-date: 2026-6-1
+date: 2026-06-01
 categories: 大模型
 tags: cuda
 ---

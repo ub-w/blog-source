@@ -315,17 +315,108 @@ class Solution(object):
 输出："blue is sky the"
 ```
 
+### 4.盛最多的水容器
 
+题目：
 
+给定一个长度为 `n` 的整数数组 `height` 。有 `n` 条垂线，第 `i` 条线的两个端点是 `(i, 0)` 和 `(i, height[i])` 。
 
+找出其中的两条线，使得它们与 `x` 轴共同构成的容器可以容纳最多的水。
 
+返回容器可以储存的最大水量。
 
+**说明：**你不能倾斜容器。
 
+```python
+class Solution(object):
+    def maxArea(self, height):
+        left = 0
+        right = len(height) - 1
+        h = 0
+        length = 0
+        max_v = 0
+        while left < right:
+            h = height[left] if height[left] < height[right] else height[right]
+            max_v = max(max_v, h * (right - left))
+            if(height[left] < height[right]):
+                left += 1
+            else:
+                right -= 1
+        return max_v
+```
 
+**示例 1：**
 
+![img](https://aliyun-lc-upload.oss-cn-hangzhou.aliyuncs.com/aliyun-lc-upload/uploads/2018/07/25/question_11.jpg)
 
+```
+输入：[1,8,6,2,5,4,8,3,7]
+输出：49 
+解释：图中垂直线代表输入数组 [1,8,6,2,5,4,8,3,7]。在此情况下，容器能够容纳水（表示为蓝色部分）的最大值为 49。
+```
 
+### 5.三数之和
 
+题目：给你一个整数数组 `nums` ，判断是否存在三元组 `[nums[i], nums[j], nums[k]]` 满足 `i != j`、`i != k` 且 `j != k` ，同时还满足 `nums[i] + nums[j] + nums[k] == 0` 。请你返回所有和为 `0` 且不重复的三元组。
+
+**注意：**答案中不可以包含重复的三元组。
+
+```python
+class Solution(object):
+    def threeSum(self, nums):
+        out = []
+        length = len(nums)
+        nums = sorted(nums)
+        for i in range(length - 2):
+            if nums[i] > 0:
+                break
+            if i>0 and nums[i] == nums[i-1]:
+                continue
+            left = i + 1
+            right = length - 1
+            while left < right:
+                total = nums[i] + nums[left] + nums[right]
+                if total == 0:
+                    out.append([nums[i], nums[left], nums[right]])
+                    while left < right and nums[left] == nums[left+1]:
+                        left += 1
+                    while left < right and nums[right] == nums[right - 1]:
+                        right -= 1
+                    left += 1
+                    right -= 1
+                elif total < 0:
+                    left += 1
+                elif total > 0:
+                    right -= 1
+        return out
+```
+
+**示例 1：**
+
+```
+输入：nums = [-1,0,1,2,-1,-4]
+输出：[[-1,-1,2],[-1,0,1]]
+解释：
+nums[0] + nums[1] + nums[2] = (-1) + 0 + 1 = 0 。
+nums[1] + nums[2] + nums[4] = 0 + 1 + (-1) = 0 。
+nums[0] + nums[3] + nums[4] = (-1) + 2 + (-1) = 0 。
+不同的三元组是 [-1,0,1] 和 [-1,-1,2] 。
+注意，输出的顺序和三元组的顺序并不重要。
+```
+
+理解：
+
+if i>0 and nums[i] == nums[i-1]:判断下一个i的值是不是和之前一样，如果一样则跳过。
+
+为什么不是i+1呢？因为如果i+1，则还没有计算就往后移，造成缺漏。
+
+ while left < right and nums[left] == nums[left+1]:
+
+包括这里也是，都是算完之后看后面的是不是和前面一样，如果一样则跳过。
+
+所以，操作手法都是先算，算完之后判断下一个数是不是重复。
+
+这道题的核心就是nums = sorted(nums)排列，先排列，后面才可以减少计算量。
 
 
 
@@ -373,3 +464,5 @@ del my_dict[key]       # 通过键删除
 （16）`split()` 是 Python 中非常实用的字符串方法，用于**将字符串分割成多个子字符串**，返回一个**列表**。默认为**任意空白字符**
 
 （17）`strip()` 是 Python 字符串方法，用于**去除字符串首尾指定的字符**（默认为空白字符）。
+
+（18）python中的三目运算符：value_if_true if condition else value_if_false

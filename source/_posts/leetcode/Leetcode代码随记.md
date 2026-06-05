@@ -14,6 +14,13 @@ tags: leetcode
 
 给你一个字符串数组，请你将字母异位词组合在一起。可以按任意顺序返回结果列表。
 
+**示例 1:**
+
+```
+输入: strs = ["eat", "tea", "tan", "ate", "nat", "bat"]
+输出:[["bat"],["nat","tan"],["ate","eat","tea"]]
+```
+
 ```python
 class Solution(object):
     def groupAnagrams(self, strs):
@@ -24,13 +31,6 @@ class Solution(object):
                 out[key] = []
             out[key].append(a)
         return list(out.values())
-```
-
-**示例 1:**
-
-```
-输入: strs = ["eat", "tea", "tan", "ate", "nat", "bat"]
-输出:[["bat"],["nat","tan"],["ate","eat","tea"]]
 ```
 
 **解释：**
@@ -53,6 +53,14 @@ class Solution(object):
 
 你可以按任意顺序返回答案。
 
+**示例 1：**
+
+```
+输入：nums = [2,7,11,15], target = 9
+输出：[0,1]
+解释：因为 nums[0] + nums[1] == 9 ，返回 [0, 1] 。
+```
+
 ```python
 class Solution(object):
     def twoSum(self, nums, target):
@@ -63,14 +71,6 @@ class Solution(object):
                 return [out[b], index]
             out[num] = index
         return []
-```
-
-**示例 1：**
-
-```
-输入：nums = [2,7,11,15], target = 9
-输出：[0,1]
-解释：因为 nums[0] + nums[1] == 9 ，返回 [0, 1] 。
 ```
 
 **思路：**
@@ -84,6 +84,14 @@ class Solution(object):
 给定一个未排序的整数数组 `nums` ，找出数字连续的最长序列（不要求序列元素在原数组中连续）的长度。
 
 请你设计并实现时间复杂度为 `O(n)` 的算法解决此问题。
+
+**示例 1：**
+
+```
+输入：nums = [100,4,200,1,3,2]
+输出：4
+解释：最长数字连续序列是 [1, 2, 3, 4]。它的长度为 4。
+```
 
 ```python
 class Solution(object):
@@ -105,14 +113,6 @@ class Solution(object):
         return maxlength
 ```
 
-**示例 1：**
-
-```
-输入：nums = [100,4,200,1,3,2]
-输出：4
-解释：最长数字连续序列是 [1, 2, 3, 4]。它的长度为 4。
-```
-
 **思路：**
 
 将原来的列表转化为哈希表，因为查找这个操作在哈希表的时间复杂度为O（1），即只查询一次，通过计算哈希值，和反解哈希值查找。这里的还用到判断起始值，以及不断加1话更新连续长度。
@@ -131,6 +131,18 @@ class Solution(object):
 
 如果 `n` 是 *快乐数* 就返回 `true` ；不是，则返回 `false` 。
 
+**示例 1：**
+
+```
+输入：n = 19
+输出：true
+解释：
+12 + 92 = 82
+82 + 22 = 68
+62 + 82 = 100
+12 + 02 + 02 = 1
+```
+
 ```python
 class Solution(object):
     def isHappy(self, n):
@@ -147,18 +159,6 @@ class Solution(object):
         return False
 ```
 
-**示例 1：**
-
-```
-输入：n = 19
-输出：true
-解释：
-12 + 92 = 82
-82 + 22 = 68
-62 + 82 = 100
-12 + 02 + 02 = 1
-```
-
 ### 5.四数相加
 
 **题目：**
@@ -167,6 +167,17 @@ class Solution(object):
 
 - `0 <= i, j, k, l < n`
 - `nums1[i] + nums2[j] + nums3[k] + nums4[l] == 0`
+
+**示例 1：**
+
+```
+输入：nums1 = [1,2], nums2 = [-2,-1], nums3 = [-1,2], nums4 = [0,2]
+输出：2
+解释：
+两个元组如下：
+1. (0, 0, 0, 1) -> nums1[0] + nums2[0] + nums3[0] + nums4[1] = 1 + (-2) + (-1) + 2 = 0
+2. (1, 1, 0, 0) -> nums1[1] + nums2[1] + nums3[0] + nums4[0] = 2 + (-1) + (-1) + 0 = 0
+```
 
 ```python
 class Solution(object):
@@ -186,17 +197,6 @@ class Solution(object):
         return cnt
 ```
 
-**示例 1：**
-
-```
-输入：nums1 = [1,2], nums2 = [-2,-1], nums3 = [-1,2], nums4 = [0,2]
-输出：2
-解释：
-两个元组如下：
-1. (0, 0, 0, 1) -> nums1[0] + nums2[0] + nums3[0] + nums4[1] = 1 + (-2) + (-1) + 2 = 0
-2. (1, 1, 0, 0) -> nums1[1] + nums2[1] + nums3[0] + nums4[0] = 2 + (-1) + (-1) + 0 = 0
-```
-
 **思路：**
 
 正常的思维四个for循环，但是时间复杂度是O（n^4）。故这里需要转变思维，可以两两拆分组合，通过算一个的哈希表，然后另一个在表里查询，但是如果创建集合，就会去重，最后结果仍然不对，所以这里选择字典，并且把和作为索引，重复次数作为值，最后计算和即可。
@@ -210,6 +210,13 @@ class Solution(object):
 如果可以，返回 `true` ；否则返回 `false` 。
 
 `magazine` 中的每个字符只能在 `ransomNote` 中使用一次。
+
+**示例 1：**
+
+```
+输入：ransomNote = "aa", magazine = "aab"
+输出：true
+```
 
 ```python
 class Solution(object):
@@ -225,13 +232,6 @@ class Solution(object):
         return all(v == 0 for v in r_dict.values())
 ```
 
-**示例 1：**
-
-```
-输入：ransomNote = "aa", magazine = "aab"
-输出：true
-```
-
 ## 二、双指针
 
 ### 1.反转字符串
@@ -241,6 +241,13 @@ class Solution(object):
 编写一个函数，其作用是将输入的字符串反转过来。输入字符串以字符数组 `s` 的形式给出。
 
 不要给另外的数组分配额外的空间，你必须**[原地](https://baike.baidu.com/item/原地算法)修改输入数组**、使用 O(1) 的额外空间解决这一问题。
+
+**示例 1：**
+
+```
+输入：s = ["h","e","l","l","o"]
+输出：["o","l","l","e","h"]
+```
 
 ```python
 class Solution(object):
@@ -253,18 +260,18 @@ class Solution(object):
             right -= 1
 ```
 
-**示例 1：**
-
-```
-输入：s = ["h","e","l","l","o"]
-输出：["o","l","l","e","h"]
-```
-
 ### 2.移动零
 
 给定一个数组 `nums`，编写一个函数将所有 `0` 移动到数组的末尾，同时保持非零元素的相对顺序。
 
 **请注意** ，必须在不复制数组的情况下原地对数组进行操作。
+
+**示例 1:**
+
+```
+输入: nums = [0,1,0,3,12]
+输出: [1,3,12,0,0]
+```
 
 ```python
 class Solution(object):
@@ -278,14 +285,9 @@ class Solution(object):
         nums[slowIndex:] = [0] * count
 ```
 
-**示例 1:**
-
-```
-输入: nums = [0,1,0,3,12]
-输出: [1,3,12,0,0]
-```
-
 ### 3.反转字符串中的单词
+
+**题目：**
 
 给你一个字符串 `s` ，请你反转字符串中 **单词** 的顺序。
 
@@ -294,6 +296,15 @@ class Solution(object):
 返回 **单词** 顺序颠倒且 **单词** 之间用单个空格连接的结果字符串。
 
 **注意：**输入字符串 `s`中可能会存在前导空格、尾随空格或者单词间的多个空格。返回的结果字符串中，单词间应当仅用单个空格分隔，且不包含任何额外的空格。
+
+**示例 1：**
+
+```
+输入：s = "the sky is blue"
+输出："blue is sky the"
+```
+
+
 
 ```python
 class Solution(object):
@@ -308,13 +319,6 @@ class Solution(object):
         return ' '.join(words)
 ```
 
-**示例 1：**
-
-```
-输入：s = "the sky is blue"
-输出："blue is sky the"
-```
-
 ### 4.盛最多的水容器
 
 题目：
@@ -326,6 +330,16 @@ class Solution(object):
 返回容器可以储存的最大水量。
 
 **说明：**你不能倾斜容器。
+
+**示例 1：**
+
+![img](https://aliyun-lc-upload.oss-cn-hangzhou.aliyuncs.com/aliyun-lc-upload/uploads/2018/07/25/question_11.jpg)
+
+```
+输入：[1,8,6,2,5,4,8,3,7]
+输出：49 
+解释：图中垂直线代表输入数组 [1,8,6,2,5,4,8,3,7]。在此情况下，容器能够容纳水（表示为蓝色部分）的最大值为 49。
+```
 
 ```python
 class Solution(object):
@@ -345,21 +359,24 @@ class Solution(object):
         return max_v
 ```
 
-**示例 1：**
-
-![img](https://aliyun-lc-upload.oss-cn-hangzhou.aliyuncs.com/aliyun-lc-upload/uploads/2018/07/25/question_11.jpg)
-
-```
-输入：[1,8,6,2,5,4,8,3,7]
-输出：49 
-解释：图中垂直线代表输入数组 [1,8,6,2,5,4,8,3,7]。在此情况下，容器能够容纳水（表示为蓝色部分）的最大值为 49。
-```
-
 ### 5.三数之和
 
 题目：给你一个整数数组 `nums` ，判断是否存在三元组 `[nums[i], nums[j], nums[k]]` 满足 `i != j`、`i != k` 且 `j != k` ，同时还满足 `nums[i] + nums[j] + nums[k] == 0` 。请你返回所有和为 `0` 且不重复的三元组。
 
 **注意：**答案中不可以包含重复的三元组。
+
+**示例 1：**
+
+```
+输入：nums = [-1,0,1,2,-1,-4]
+输出：[[-1,-1,2],[-1,0,1]]
+解释：
+nums[0] + nums[1] + nums[2] = (-1) + 0 + 1 = 0 。
+nums[1] + nums[2] + nums[4] = 0 + 1 + (-1) = 0 。
+nums[0] + nums[3] + nums[4] = (-1) + 2 + (-1) = 0 。
+不同的三元组是 [-1,0,1] 和 [-1,-1,2] 。
+注意，输出的顺序和三元组的顺序并不重要。
+```
 
 ```python
 class Solution(object):
@@ -391,19 +408,6 @@ class Solution(object):
         return out
 ```
 
-**示例 1：**
-
-```
-输入：nums = [-1,0,1,2,-1,-4]
-输出：[[-1,-1,2],[-1,0,1]]
-解释：
-nums[0] + nums[1] + nums[2] = (-1) + 0 + 1 = 0 。
-nums[1] + nums[2] + nums[4] = 0 + 1 + (-1) = 0 。
-nums[0] + nums[3] + nums[4] = (-1) + 2 + (-1) = 0 。
-不同的三元组是 [-1,0,1] 和 [-1,-1,2] 。
-注意，输出的顺序和三元组的顺序并不重要。
-```
-
 理解：
 
 if i>0 and nums[i] == nums[i-1]:判断下一个i的值是不是和之前一样，如果一样则跳过。
@@ -418,7 +422,70 @@ if i>0 and nums[i] == nums[i-1]:判断下一个i的值是不是和之前一样�
 
 这道题的核心就是nums = sorted(nums)排列，先排列，后面才可以减少计算量。
 
+6.接雨水
 
+题目：
+
+给定 `n` 个非负整数表示每个宽度为 `1` 的柱子的高度图，计算按此排列的柱子，下雨之后能接多少雨水。
+
+**示例 1：**
+
+![img](https://assets.leetcode.cn/aliyun-lc-upload/uploads/2018/10/22/rainwatertrap.png)
+
+```
+输入：height = [0,1,0,2,1,0,1,3,2,1,2,1]
+输出：6
+解释：上面是由数组 [0,1,0,2,1,0,1,3,2,1,2,1] 表示的高度图，在这种情况下，可以接 6 个单位的雨水（蓝色部分表示雨水）。 
+```
+
+```python
+class Solution(object):
+    def trap(self, height):
+        left = 0
+        right = len(height) - 1
+        leftmax = height[left]
+        rightmax = height[right] 
+        out = 0
+        if len(height) < 3:
+            return 0
+        while left < right:
+            if height[left] < height[right]:
+                if height[left] > leftmax:
+                    leftmax = height[left]
+                else:
+                    out += leftmax - height[left]
+                left += 1
+            else:
+                if height[right] > rightmax:
+                    rightmax = height[right]
+                else:
+                    out += rightmax - height[right]
+                right -= 1
+        return out
+```
+
+**思路总结**
+
+**核心逻辑**：每个位置能接多少水，取决于它**左边最高柱子**和**右边最高柱子**中较矮的那个，减去自己高度。
+
+**双指针技巧**：
+
+- 左指针 `left`、右指针 `right` 从两端向中间移动
+- `leftmax` 记录左边见过的最高柱子，`rightmax` 记录右边见过的最高柱子
+- **哪边矮，先处理哪边**（因为积水上限由矮的一侧决定）
+
+具体步骤：
+
+1. 比较 `height[left]` 和 `height[right]`
+2. 如果左边矮：
+   - 更新 `leftmax`（如果当前更高）
+   - 否则累加积水：`leftmax - height[left]`
+   - 左指针右移
+3. 如果右边矮或相等：
+   - 更新 `rightmax`（如果当前更高）
+   - 否则累加积水：`rightmax - height[right]`
+   - 右指针左移
+4. 重复直到两指针相遇
 
 
 

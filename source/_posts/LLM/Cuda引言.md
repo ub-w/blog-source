@@ -396,13 +396,135 @@ kernel<<<10, 256>>>();  // 10个线程块，每块256个线程 = 2560个线程
 
 ![image-20260604160221348](https://cdn.jsdelivr.net/gh/ub-w/Article-images@main/Typora20260604160221410.png)
 
-## 九、cuda内存模型
+## 九、延迟隐藏
+
+**延迟隐藏的概念**
+
+![image-20260604162303028](https://cdn.jsdelivr.net/gh/ub-w/Article-images@main/Typora20260604162303078.png)
+
+| 术语     | 定义                                                 |
+| :------- | :--------------------------------------------------- |
+| 指令延迟 | 指令发出到完成之间的时钟周期数                       |
+| 延迟隐藏 | GPU用其他线程束的计算来掩盖指令延迟                  |
+| 理想状态 | 每个时钟周期，所有线程周期器都有一个符合条件的线程束 |
+
+为了充分利用这个机制，最好保证一个SM上同时运行远超过核心数的线程束，保证总是存在线程束处于等待状态以供其他线程束遇到阻塞时，可以选择等待的线程束来进行交换执行，从而隐藏延迟。
+
+![image-20260604165943651](https://cdn.jsdelivr.net/gh/ub-w/Article-images@main/Typora20260604165943695.png)
+
+可以看到，每个SM的最大线程数量远大于核心数量，这里的GPU核心一个周期只能执行一个线程。比如V100只有64的核心，意味着一个SM在同一周期一次只能执行2个线程束，但是该SM上可以最多放32个线程束，即其他线程束处于等待，由调度器合理分配。对了，可以发现为了保证每一个周期最好执行完整的线程束，这里的核心数量在设计是都是32的倍数。
+
+## **十、SM占有率**
+
+**基本概念**
+
+| 术语           | 定义                       |
+| :------------- | :------------------------- |
+| 活跃线程块     | 已分配计算资源的线程块     |
+| 活跃线程束     | 活跃线程块包含的线程束     |
+| 活跃线程束类型 | 选定的、阻塞的、符合条件的 |
+
+**占用率公式**：
+
+```
+占用率 = 活跃线程束数量 / 最大线程束数量
+```
+
+**参考V100：**
+
+每个SM最大线程数2048，每一个SM最大线程块数量32，每一个线程块最大线程数1024.
+
+如果我们定义一个线程块有256个线程，那么2048/256 = 8 blocks < 32 blocks.
+
+如果我们定义一个线程块有32个线程，那么2048/32 = 64 blocks > 32 blocks.
+
+如果我们定义一个线程块有768个线程，那么2048/768 = 2 blocks 且剩余512个线程资源浪费。
+
+故我们要求，**每一个SM上的线程块数量不能超过上限；每个SM上的总线程数必须能被线程块的大小整除。**
+
+通过`cudaGetDeviceProperties`**一次获取所有属性**
+
+```c++
+#include <cuda_runtime.h>
+#include <stdio.h>
+
+int main() {
+    int deviceCount;
+    cudaGetDeviceCount(&deviceCount);
+    
+    for (int i = 0; i < deviceCount; i++) {
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, i);
+        
+        printf("设备 %d: %s\n", i, prop.name);
+        printf("  计算能力: %d.%d\n", prop.major, prop.minor);
+        printf("  SM数量: %d\n", prop.multiProcessorCount);
+        printf("  每SM最大线程数: %d\n", prop.maxThreadsPerMultiProcessor);
+        printf("  每块最大线程数: %d\n", prop.maxThreadsPerBlock);
+        printf("  每SM共享内存: %zu KB\n", prop.sharedMemPerMultiprocessor / 1024);
+        printf("  每块共享内存: %zu KB\n", prop.sharedMemPerBlock / 1024);
+        printf("  每块寄存器数: %d\n", prop.regsPerBlock);
+        printf("  显存总量: %zu MB\n", prop.totalGlobalMem / (1024*1024));
+        printf("  时钟频率: %d kHz\n", prop.clockRate);
+        printf("  总线宽度: %d bit\n", prop.memoryBusWidth);
+        printf("  L2缓存: %d KB\n", prop.l2CacheSize / 1024);
+    }
+    return 0;
+}
+```
+
+## 十一、性能指标
+
+### 1.性能指标
+
+- FLOPS Rate：浮点速率，每秒执行多少次浮点操作，衡量GPU核心的计算能力有多少
+- Memory Bandwidth：带宽，每秒传输多少字节，衡量GPU的数据搬运能力。
+
+![image-20260605161324457](https://cdn.jsdelivr.net/gh/ub-w/Article-images@main/Typora20260605161324803.png)
+
+**不是保证值**：实际跑代码时，受限于**延迟**、**控制发散**、**内存访问模式**等因素，性能远低于表格里的峰值。
+
+### 2.性能界限
+
+- Compute-bound：计算受限，性能受限于浮点计算速率，比如我们的处理器核心始终处于满负荷运行状态，我们没有多余的核心处理其他任务，那么程序就会受到计算能力的限制。
+- Memory-bound：内存受限，性能受限于内存宽带。在这种情况下，处理器核心可能会在不同的时间点处于闲置状态，因为他们需要等待内存数据的到来。
+
+![image-20260605162258857](https://cdn.jsdelivr.net/gh/ub-w/Article-images@main/Typora20260605162258895.png)
+
+这里引入了一个新的关键指标，理想的计算与内存访问比（OP/B），简称计算与内存比，也就是浮点运算次数与内存带宽的比值。比如14028/900 = 15.6，它表示，每从内存搬运1字节的数据，需要执行15.6次浮点运算。由于单精度浮点数是4字节，故每从内存搬运一个单精度浮点数，需要执行62.4次浮点运算。
+
+### 3.例子：向量加法
+
+```c++
+// 向量加法：每次读取2个浮点数(8字节)，做1次加法
+z[i] = x[i] + y[i];
+```
+
+实际算数强度 = `1次运算 ÷ 8字节 = 0.125 OP/B`
+
+远低于15.6 → **内存受限**，因为我们为个加载字节所作的运算太少了，导致GPU核心大部分时间处于限制状态。
+
+### 4.例子：矩阵乘法
+
+```c++
+for(unsigned int i = 0; i < N; ++i) {
+    sum += A[row*N + i] * B[i*N + col];
+}
+```
+
+读取两个浮点数8字节，做一次乘法+一次假发，两次运算。
+
+实际算数强度 = `2次运算 ÷ 8字节 = 0.25 OP/B`
+
+远低于15.6 → **内存受限**
+
+## 十二、cuda内存模型
 
 ![image-20260603141252513](https://cdn.jsdelivr.net/gh/ub-w/Article-images@main/Typoraimage-20260603141252513.png)
 
 ![image-20260603141658583](https://cdn.jsdelivr.net/gh/ub-w/Article-images@main/Typoraimage-20260603141658583.png)
 
-------
+![image-20260605170330581](https://cdn.jsdelivr.net/gh/ub-w/Article-images@main/Typora20260605170330643.png)
 
 ### 1.寄存器内存
 
@@ -577,109 +699,4 @@ cudaDeviceProp::globalL1CacheSupported
 | 图灵 Turing | 7.5      | 96 KB        | 32, 64                          |
 | 安培 Ampere | 8.0      | 192 KB       | 0, 8, 16, 32, 64, 100, 132, 164 |
 
-## 十、计算资源分配
-
-**线程执行资源分配**
-
-- 线程束本地执行上下文主要资源：**程序计数器、寄存器、共享内存**
-- 这些资源属于 **片上（on-chip）资源**，**上下文切换无时间损耗**
-- 同一SM中同时存在的线程块/线程束数量，取决于**寄存器和共享内存的可用量**
-
-------
-
-**寄存器对线程数目的影响**
-
-| 关系       | 说明                       |
-| :--------- | :------------------------- |
-| 寄存器越多 | 每SM可容纳的线程束越少     |
-| 寄存器越少 | 每SM可同时处理的线程束越多 |
-
-**以计算能力 8.9 为例**：每个SM寄存器数量 = **64KB**
-
-------
-
-**共享内存对线程块数量的影响**
-
-| 关系         | 说明                       |
-| :----------- | :------------------------- |
-| 共享内存越多 | 每SM可同时处理的线程块越少 |
-| 共享内存越少 | 可同时处理的线程块越多     |
-
-**以计算能力 8.9 为例**：每个SM共享内存大小 = **100KB**
-
-## 十一、延迟隐藏
-
-**延迟隐藏的概念**
-
-![image-20260604162303028](https://cdn.jsdelivr.net/gh/ub-w/Article-images@main/Typora20260604162303078.png)
-
-| 术语     | 定义                                                 |
-| :------- | :--------------------------------------------------- |
-| 指令延迟 | 指令发出到完成之间的时钟周期数                       |
-| 延迟隐藏 | GPU用其他线程束的计算来掩盖指令延迟                  |
-| 理想状态 | 每个时钟周期，所有线程周期器都有一个符合条件的线程束 |
-
-为了充分利用这个机制，最好保证一个SM上同时运行远超过核心数的线程束，保证总是存在线程束处于等待状态以供其他线程束遇到阻塞时，可以选择等待的线程束来进行交换执行，从而隐藏延迟。
-
-![image-20260604165943651](https://cdn.jsdelivr.net/gh/ub-w/Article-images@main/Typora20260604165943695.png)
-
-可以看到，每个SM的最大线程数量远大于核心数量，这里的GPU核心一个周期只能执行一个线程。比如V100只有64的核心，意味着一个SM在同一周期一次只能执行2个线程束，但是该SM上可以最多放32个线程束，即其他线程束处于等待，由调度器合理分配。对了，可以发现为了保证每一个周期最好执行完整的线程束，这里的核心数量在设计是都是32的倍数。
-
-## **十二、SM占有率**
-
-**基本概念**
-
-| 术语           | 定义                       |
-| :------------- | :------------------------- |
-| 活跃线程块     | 已分配计算资源的线程块     |
-| 活跃线程束     | 活跃线程块包含的线程束     |
-| 活跃线程束类型 | 选定的、阻塞的、符合条件的 |
-
-**占用率公式**：
-
-```
-占用率 = 活跃线程束数量 / 最大线程束数量
-```
-
-**参考V100：**
-
-每个SM最大线程数2048，每一个SM最大线程块数量32，每一个线程块最大线程数1024.
-
-如果我们定义一个线程块有256个线程，那么2048/256 = 8 blocks < 32 blocks.
-
-如果我们定义一个线程块有32个线程，那么2048/32 = 64 blocks > 32 blocks.
-
-如果我们定义一个线程块有768个线程，那么2048/768 = 2 blocks 且剩余512个线程资源浪费。
-
-故我们要求，**每一个SM上的线程块数量不能超过上限；每个SM上的总线程数必须能被线程块的大小整除。**
-
-通过`cudaGetDeviceProperties`**一次获取所有属性**
-
-```c++
-#include <cuda_runtime.h>
-#include <stdio.h>
-
-int main() {
-    int deviceCount;
-    cudaGetDeviceCount(&deviceCount);
-    
-    for (int i = 0; i < deviceCount; i++) {
-        cudaDeviceProp prop;
-        cudaGetDeviceProperties(&prop, i);
-        
-        printf("设备 %d: %s\n", i, prop.name);
-        printf("  计算能力: %d.%d\n", prop.major, prop.minor);
-        printf("  SM数量: %d\n", prop.multiProcessorCount);
-        printf("  每SM最大线程数: %d\n", prop.maxThreadsPerMultiProcessor);
-        printf("  每块最大线程数: %d\n", prop.maxThreadsPerBlock);
-        printf("  每SM共享内存: %zu KB\n", prop.sharedMemPerMultiprocessor / 1024);
-        printf("  每块共享内存: %zu KB\n", prop.sharedMemPerBlock / 1024);
-        printf("  每块寄存器数: %d\n", prop.regsPerBlock);
-        printf("  显存总量: %zu MB\n", prop.totalGlobalMem / (1024*1024));
-        printf("  时钟频率: %d kHz\n", prop.clockRate);
-        printf("  总线宽度: %d bit\n", prop.memoryBusWidth);
-        printf("  L2缓存: %d KB\n", prop.l2CacheSize / 1024);
-    }
-    return 0;
-}
-```
+## 
